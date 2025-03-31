@@ -1,0 +1,178 @@
+label kernel_entry_point
+copy FREE_MEMORY_END to REG_A
+write OP_INCR to REG_OP
+cpu_exec
+copy REG_RES to var:sys_stack_ptr
+
+// init file system
+copy PROGRAM_COUNTER to var:sys_return
+jump label:sys_fs_init
+
+
+// Print welcome message
+write "RAMFS init - done." to DISPLAY_BUFFER
+write COLOR_GREEN to DISPLAY_COLOR
+write OP_DISPLAY_LN to REG_OP
+cpu_exec
+
+var exitStr
+write "exit" to var:exitStr
+
+var compareStr
+write "compare" to var:compareStr
+
+label kernel_start
+    // Display prompt to enter the value:
+    copy var:sys_work_dir to DISPLAY_BUFFER
+    write "" to DISPLAY_COLOR
+    write OP_DISPLAY to REG_OP
+    cpu_exec
+    write " :) " to DISPLAY_BUFFER
+    cpu_exec
+
+    // read cmd from keyboard
+    write OP_READ_INPUT to REG_OP
+    write KEYBOARD_READ_LINE to REG_A
+    cpu_exec
+
+    // split into command and arguments:
+    copy KEYBOARD_BUFFER to REG_A
+    write "1" to REG_B
+    write " " to REG_C
+    write OP_GET_COLUMN to REG_OP
+    cpu_exec
+    var parsedStr
+    copy REG_RES to var:parsedStr
+
+    // Get first argument of the command
+    var parsedArg1
+    copy KEYBOARD_BUFFER to REG_A
+    write 2 to REG_B
+    write " " to REG_C
+    write OP_GET_COLUMN to REG_OP
+    cpu_exec
+    copy REG_RES to var:parsedArg1
+    var parsedArg2
+    write 3 to REG_B
+    cpu_exec
+    copy REG_RES to var:parsedArg2
+
+    // Check if command is exit if not then jump to the start of the loop
+    // otherwise we will go to the next instruction which is exit
+    copy var:parsedStr to REG_A
+    copy var:exitStr to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:kernel_end
+
+    // Check cat command e.g. cat path/to/file :
+    copy var:parsedStr to REG_A
+    copy var:compareStr to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:compare_command
+
+    jump label:kernel_start
+
+label compare_command
+    copy var:parsedArg1 to REG_A
+    write "" to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:kernel_start
+    copy var:parsedArg2 to REG_A
+    cpu_exec
+    jump_if label:kernel_start
+
+    var compare_command_file_desc_1
+    copy var:parsedArg1 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:kernel_start
+    copy REG_RES to var:compare_command_file_desc_1
+
+    var compare_command_file_desc_2
+    copy var:parsedArg2 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:kernel_start
+    copy REG_RES to var:compare_command_file_desc_2
+
+    // Read files line by line:
+    var compare_command_counter
+    write 0 to var:compare_command_counter
+    var buffer1
+    var buffer2
+    label compare_command_loop
+        copy var:compare_command_counter to REG_A
+        write OP_INCR to REG_OP
+        cpu_exec
+        copy REG_RES to var:compare_command_counter
+        copy var:compare_command_file_desc_1  to REG_A
+        copy var:compare_command_counter to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:compare_command_close
+        copy REG_RES to var:buffer1
+        copy var:compare_command_file_desc_2 to REG_A
+        copy var:compare_command_counter to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:compare_command_close
+        copy REG_RES to var:buffer2
+        // Compare the two buffers:
+        copy var:buffer1 to REG_A
+        copy var:buffer2 to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:compare_command_loop
+        
+        
+        copy var:buffer1 to DISPLAY_BUFFER
+        write COLOR_GREEN to DISPLAY_COLOR
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write " != " to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:buffer2 to DISPLAY_BUFFER
+        write COLOR_GREEN to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        // Display the line number:
+        copy var:compare_command_counter to DISPLAY_BUFFER
+        write "" to REG_B
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write " - line number there mismatch occurs." to DISPLAY_BUFFER
+        write COLOR_CYAN to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+
+    label compare_command_close
+        // Let's close file
+        copy var:compare_command_file_desc_1 to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+
+        copy var:compare_command_file_desc_2 to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+        jump label:kernel_start
+
+
+label kernel_end
+    copy REG_ERROR to DISPLAY_BUFFER
+    write COLOR_RED to DISPLAY_COLOR
+    write OP_DISPLAY_LN to REG_OP
+    cpu_exec
+
+    // Print bye message and exit:
+    write "Good bye!" to DISPLAY_BUFFER
+    write COLOR_GREEN to DISPLAY_COLOR
+    write OP_DISPLAY_LN to REG_OP
+    cpu_exec
+
+    write OP_HALT to REG_OP
+    cpu_exec
