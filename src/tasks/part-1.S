@@ -33,7 +33,7 @@ _start:
 
     mov x0, x19
     ldr x1, =file_text
-    mov x2, #5
+    mov x2, #39
     mov x8, #64
     svc #0
 
